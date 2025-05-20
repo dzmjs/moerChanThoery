@@ -1,0 +1,710 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<title>TradingView Advanced Charts demo</title>
+
+		<!-- Fix for iOS Safari zooming bug -->
+		<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,minimum-scale=1.0">
+
+		<script type="text/javascript" src="charting_library/charting_library.standalone.js"></script>
+		<script type="text/javascript" src="datafeeds/udf/dist/bundle.js"></script>
+		<script type="text/javascript" src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+		<!-- DataTables CSS -->
+		<link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css">
+		<!-- DataTables JS -->
+    	<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+		<!-- dialog JS -->
+		<link href="https://code.jquery.com/ui/1.13.3/themes/base/jquery-ui.css" rel="stylesheet">
+		<script src="https://code.jquery.com/ui/1.13.3/jquery-ui.min.js"></script>
+		<style>
+			#myTable input{
+				width: 100%;
+			}
+			#calender{
+				position: absolute;
+				top: 0;
+				left: 468px;
+				z-index: 1000;
+				background-color: #4CAF50;
+				color: white;
+				border: none;
+				padding: 3px;
+				text-align: center;
+				text-decoration: none;
+				display: inline-block;
+				font-size: 14px;
+				margin: 4px;
+			}
+			#topVolume{
+				position: absolute;
+				top: 0;
+				left: 1132px;
+				z-index: 1000;
+				background-color: #4CAF50;
+				color: white;
+				border: none;
+				padding: 5px;
+				text-align: center;
+				text-decoration: none;
+				display: inline-block;
+				font-size: 14px;
+				margin: 4px;
+				cursor: pointer;
+			}
+			#thirdBSAndHot{
+				position: absolute;
+				top: 10px;
+				left: 1054px;
+				z-index: 1000;
+			}
+			#thirdBS{
+				position: absolute;
+				top: 0;
+				left: 1072px;
+				z-index: 1000;
+				background-color: #4CAF50;
+				color: white;
+				border: none;
+				padding: 5px;
+				text-align: center;
+				text-decoration: none;
+				display: inline-block;
+				font-size: 14px;
+				margin: 4px;
+				cursor: pointer;
+			}
+			#hotStockButton{
+				position: absolute;
+				top: 0;
+				left: 940px;
+				z-index: 1000;
+				background-color: #4CAF50;
+				color: white;
+				border: none;
+				padding: 5px;
+				text-align: center;
+				text-decoration: none;
+				display: inline-block;
+				font-size: 14px;
+				margin: 4px;
+				cursor: pointer;
+			}
+			#chanThoery {
+				position: absolute;
+				top: 0;
+				left: 982px;
+				z-index: 1000;
+				background-color: #4CAF50;
+				color: white;
+				border: none;
+				padding: 5px;
+				text-align: center;
+				text-decoration: none;
+				display: inline-block;
+				font-size: 14px;
+				margin: 4px;
+				cursor: pointer;
+			}
+		</style>
+
+		<script type="text/javascript">
+			var chanLun_lines=[];
+			const baseUrl='http://127.0.0.1:8000';
+			var hot_stock_uri = '/hot_stock?datetimeGT=2025-05-02';
+			var top_volume_uri = '/top_volume?datetimeGT=2025-05-02&datetimeET=2025-05-02';
+			var thirdBS_uri = "/third_bs_query?datetimeGT=2025-05-01&datetimeET=2025-05-03&resolution=1D";
+			var myTableObj=null, thirdBSTableObj=null, topVolumeTableObj=null;
+			 $(document).ready(function() {
+				 $("#calendar1").datepicker({
+					 dateFormat: "yy-mm-dd", // 格式化为2024-06-30
+					 // defaultDate: new Date(),
+					 showButtonPanel:false,
+					 onClose: function (dateText, inst){
+						 var tt=$("#calendar2").val();
+						 var multi = $("#multi").val();
+						 hot_stock_uri = '/hot_stock?multi='+multi+'&datetimeGT='+dateText+"&datetimeET="+tt;
+					 }
+				 });
+				 $("#calendar2").datepicker({
+					 dateFormat: "yy-mm-dd", // 格式化为2024-06-30
+					 // defaultDate: new Date(),
+					 showButtonPanel:true,
+					 onClose: function (dateText, inst){
+						 const d=new Date(dateText).getTime()-1*24*3600*1000
+						 var last2day = $.datepicker.formatDate('yy-mm-dd', new Date(d));
+						 $("#calendar1").val(last2day);
+						 var multi = $("#multi").val();
+						 hot_stock_uri = '/hot_stock?multi='+multi+'&datetimeGT='+last2day+"&datetimeET="+dateText;
+					 }
+				 });
+				 var today = $.datepicker.formatDate('yy-mm-dd', new Date());
+				 $("#calendar2").val(today);
+				 const t=new Date().getTime()-2*24*3600*1000;
+				 var last2day = $.datepicker.formatDate('yy-mm-dd', new Date(t));
+				 $("#calendar1").val(last2day);
+				 hot_stock_uri = '/hot_stock?multi=1.5&datetimeGT='+last2day+"&datetimeET="+today;
+
+				 $("#multi").on('blur',function(e){
+					 var multi = $(this).val();
+					 var last2day = $("#calendar1").val();
+					 var tt=$("#calendar2").val();
+					 hot_stock_uri = '/hot_stock?multi='+multi+'&datetimeGT='+last2day+"&datetimeET="+tt;
+				 });
+				 // 热门股票窗口
+				 $("#hotStock").dialog({
+					 modal: false,
+					 autoOpen: false,
+					 width: 1400,
+					 height: 700,
+					 /*buttons: {
+						"确定": function() {
+						  $(this).dialog("close");
+						}
+					 }*/
+				 });
+				 myTableObj = $('#myTable').DataTable({
+					ajax: {
+						url: baseUrl + hot_stock_uri,   // 你的后端数据接口地址
+						// dataSrc: ''              // 假如返回的是数组，不是对象最外层data才这样写
+					},
+					columns: [
+						{ data: 'Datetime',
+							render: function(data, type, row) {
+								// 毫秒时间戳转日期
+								var d = new Date(Number(data));
+								// return d.toLocaleString();
+								return d.toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
+							}
+						},
+						{ data: 'Ticker' },
+						{ data: 'Volume' , render: $.fn.dataTable.render.number(',', '.', 0) },
+						{ data: 'MA5' , render: $.fn.dataTable.render.number(',', '.', 0) },
+						{ data: 'MA10' , render: $.fn.dataTable.render.number(',', '.', 0) },
+						{ data: 'cha5',
+							render: $.fn.dataTable.render.number(',', '.', 2)
+						},
+						{ data: 'cha10',render:  $.fn.dataTable.render.number(',', '.', 2)
+						},
+						{ data: 'ma5p',
+							render: function(data, type, row) {
+								return (data*100).toFixed(2)
+							}
+						},
+						{ data: 'ma10p' ,
+							render: function(data, type, row) {
+								return (data*100).toFixed(2)
+							}
+						},{
+							"data": null,
+							"title": "操作", // 可选，表头自定义
+							"orderable": false, // 不排序
+							"render": function(data, type, row, meta){
+								// data/row 就是当前行的数据
+								// 假设row有id主键
+								return '<button class="edit-btn" data-id="'+row.Ticker+'">查看</button>';
+							}
+						}
+					]
+				});
+				 // 成交量前100名
+				 $("#topVolumeDiv").dialog({
+					 modal: false,
+					 autoOpen: false,
+					 width: 1400,
+					 height: 700,
+				 });
+				 topVolumeTableObj = $('#topVolumeTable').DataTable({
+					 ajax: {
+						 url: baseUrl + top_volume_uri,   // 你的后端数据接口地址
+						 // dataSrc: ''              // 假如返回的是数组，不是对象最外层data才这样写
+					 },
+					 columns: [
+						 {data: 'Ticker'},
+						 {data: 'Datetime',
+							render: function(data, type, row) {
+								// 毫秒时间戳转日期
+								var d = new Date(Number(data));
+								// return d.toLocaleString();
+								return d.toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
+							}
+						 },
+						 {data: 'Open', render: $.fn.dataTable.render.number(',', '.', 2) },
+						 {data: 'High', render: $.fn.dataTable.render.number(',', '.', 2) },
+						 {data: 'Low', render: $.fn.dataTable.render.number(',', '.', 2) },
+						 {data: 'Close', render: $.fn.dataTable.render.number(',', '.', 2) },
+						 { data: 'Volume' , render: $.fn.dataTable.render.number(',', '.', 0) },
+						 {
+							"data": null,
+							"title": "操作", // 可选，表头自定义
+							"orderable": false, // 不排序
+							"render": function(data, type, row, meta){
+								// data/row 就是当前行的数据
+								// 假设row有id主键
+								return '<button class="thirdBS-btn" data-id="'+row.Ticker+'">查看</button>';
+							}
+						}
+
+					 ],
+					 processing: true, // 开启DataTables内置的“正在处理...”动画
+					 language: {
+						processing: "数据加载中..." // 可自定义文字
+					 }
+				 });
+				 //三买卖窗口
+				 $("#thirdBSDiv").dialog({
+					 modal: false,
+					 autoOpen: false,
+					 width: 1400,
+					 height: 700,
+				 });
+				 thirdBSTableObj = $('#thirdBSTable').DataTable({
+					 ajax: {
+						 url: baseUrl + thirdBS_uri,   // 你的后端数据接口地址
+						 // dataSrc: ''              // 假如返回的是数组，不是对象最外层data才这样写
+					 },
+					 columns: [
+						 {data: 'Ticker'},
+						 { data: 'startDate',
+							render: function(data, type, row) {
+								return formatDate(data, 'yyyy-MM-dd HH:mm')
+							}
+						},
+						 { data: 'endDate',
+							render: function(data, type, row) {
+								return formatDate(data, 'yyyy-MM-dd HH:mm')
+							}
+						},
+						 {data: 'Line_Type'},
+						 {data: 'class_type'},
+						 {data: 'volume', render: $.fn.dataTable.render.number(',', '.', 1) },
+						 {data: 'ma10', render: $.fn.dataTable.render.number(',', '.', 1) },
+						 {data: 'BeiBi', render: $.fn.dataTable.render.number(',', '.', 3) },
+						 {
+							"data": null,
+							"title": "操作", // 可选，表头自定义
+							"orderable": false, // 不排序
+							"render": function(data, type, row, meta){
+								// data/row 就是当前行的数据
+								// 假设row有id主键
+								return '<button class="thirdBS-btn" data-id="'+row.Ticker+'">查看</button>';
+							}
+						}
+
+					 ],
+					 processing: true, // 开启DataTables内置的“正在处理...”动画
+					 language: {
+						processing: "数据加载中..." // 可自定义文字
+					 }
+				 });
+				 var minFilter = { 2: null, 3: null, 4: null, 5: null,6: null, 7: null, 8: null}; // 键为表的列下标
+				 $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+					// 遍历有filter的列
+					for(var col in minFilter){
+						var minValue = minFilter[col];
+						if(minValue !== null && minValue !== ''){
+							// data[col] 是表格当前渲染行的指定列，通常被渲染后带逗号要去掉
+							var cellValue = Number(data[col].replace(/,/g,''));
+							if (isNaN(cellValue) || cellValue <= Number(minValue)) {
+								return false; // 不通过筛选
+							}
+						}
+					}
+					return true; // 全部通过
+				});
+
+				 // 监听三个列的输入（Volume=第2列，MA5=第3列，MA10=第4列）
+				 $('#myTable thead tr:eq(0) th').each(function(i) {
+					var $input = $('input', this);
+					if ($input.length) {
+						$input.on('keyup change', function() {
+							// 把相应列的最小值记录下来
+							minFilter[i] = cleanNumber(this.value);
+							myTableObj.draw();
+						});
+					}
+				});
+				 $(document).on('click', '.edit-btn', function(){
+					var id = $(this).data('id');
+					// 你的编辑逻辑
+					var chart = window.tvWidget.activeChart();
+					chart.setSymbol(id)
+					 chart.setResolution('1D')
+					 $("#hotStock").dialog('close');
+				});
+				 $(document).on('click', '.thirdBS-btn', function(){
+					var id = $(this).data('id');
+					// 你的编辑逻辑
+					var chart = window.tvWidget.activeChart();
+					chart.setSymbol(id);
+					$("#hotStock").dialog('close');
+				});
+			 })
+			function formatDate(date, format) {
+				if (!(date instanceof Date)) {
+					date = new Date(date); // 支持时间戳或字符串
+				}
+				const map = {
+					'yyyy': date.getFullYear(),
+					'MM': ('0' + (date.getMonth() + 1)).slice(-2),
+					'dd': ('0' + date.getDate()).slice(-2),
+					'HH': ('0' + date.getHours()).slice(-2),
+					'mm': ('0' + date.getMinutes()).slice(-2),
+					'ss': ('0' + date.getSeconds()).slice(-2)
+				};
+				return format.replace(/yyyy|MM|dd|HH|mm|ss/g, (key) => map[key]);
+			}
+			function cleanNumber(str) {
+			  // 去除所有空格和逗号
+			  var cleaned = str.replace(/[\s,]/g, '');
+			  // 转成数字
+			  return Number(cleaned);
+			}
+			function getParameterByName(name) {
+				name = name.replace(/[\[]/, "\\[").replace(/[\]]/, "\\]");
+				var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
+					results = regex.exec(location.search);
+				return results === null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
+			}
+
+			function clearAllLines(chart){
+				for(var id in chanLun_lines){
+					if(chanLun_lines[id]==null){
+						continue
+					}
+					chart.removeEntity(chanLun_lines[id]);
+				}
+                chanLun_lines = []
+			}
+			function createText(chart, time, price, text){
+				 var id = chart.createShape(
+					  {
+						time: time, // 时间戳/或bar索引
+						price: price,       // 价格
+					  },
+					  {
+						shape: 'text',
+						text: text,//'三买信号',
+						lock: true,
+					  }
+					)
+				 if(id){
+					 chanLun_lines.push(id);
+				 }
+			}
+			function drawLines(chart, symbol, resolution){
+				$.ajax({
+					url: baseUrl+'/chan',
+					type: 'GET',
+					dataType: 'json', // 指定返回数据类型为 JSON
+					data: {
+						symbol: symbol,
+						resolution: resolution
+					},
+					success: function(response) {
+						// chart.removeAllStudies();
+						// chart.removeEntity(test);
+						// console.log('Success:', response);
+						for(var i in response){
+							const item = response[i];
+							if (item.class_type){
+								if(item.class_type=='Third Buy'){
+									if(item.Line_Type == 'down'){
+										createText(chart, item.endDate, item.endPrice, item.class_type);
+									}else{
+										createText(chart, item.startDate, item.startPrice, item.class_type);
+									}
+								}
+								if(item.class_type=='Third Sell'){
+									if(item.Line_Type == 'up'){
+										createText(chart, item.endDate, item.endPrice, item.class_type);
+									}else{
+										createText(chart, item.startDate, item.startPrice, item.class_type);
+									}
+								}
+							}
+							var lineId = chart.createMultipointShape(
+							  [
+								{ time: item.startDate, price: item.startPrice },
+								{ time: item.endDate, price: item.endPrice },
+							  ],
+							  {
+								shape: 'trend_line',
+								overrides: {
+								  linecolor: '#FF0000',
+								  linewidth: 2,
+								},
+								lock: true,
+								disableSelection: true,
+								disableSave: true,
+								disableUndo: true,
+								text: item.Line_Type,
+							  });
+							chanLun_lines.push(lineId);
+						}
+					},
+					error: function(xhr, status, error) {
+						console.error('Error:', error);
+					}
+				});
+			}
+			function initOnReady() {
+				console.info(TradingView.version());
+				var datafeedUrl = baseUrl;//"http://127.0.0.1:8000";
+				// var datafeedUrl = "https://demo-feed-data.tradingview.com";
+				var customDataUrl = getParameterByName('dataUrl');
+				if (customDataUrl !== "") {
+					datafeedUrl = customDataUrl.startsWith('https://') ? customDataUrl : `https://${customDataUrl}`;
+				}
+
+				var widget = window.tvWidget = new TradingView.widget({
+					// debug: true, // uncomment this line to see Library errors and warnings in the console
+					fullscreen: true,
+					symbol: 'AAPL',
+					// interval: '5',
+					interval: '1D',
+					container: "tv_chart_container",
+
+					//	BEWARE: no trailing slash is expected in feed URL
+					datafeed: new Datafeeds.UDFCompatibleDatafeed(datafeedUrl, undefined, {
+						maxResponseLength: 1000,
+						expectedOrder: 'latestFirst',
+					}),
+					library_path: "charting_library/",
+					locale: getParameterByName('lang') || "en",
+					timezone: "UTC",
+					time_scale: {
+						timeVisible: true,
+						secondsVisible: true,
+					},
+
+					// disabled_features: ["use_localstorage_for_settings"],
+					disabled_features: [],
+					enabled_features: ["study_templates","use_localstorage_for_settings"],
+					// charts_storage_url: 'https://saveload.tradingview.com',
+					charts_storage_api_version: "1.1",
+					client_id: 'tradingview.com',
+					user_id: 'public_user_id',
+					theme: getParameterByName('theme'),
+					debug: false,
+					// debug: true,
+					custom_formatters: {
+						timeFormatter: {
+							format: (date) => {
+								const _format_str = '%h:%m';
+								return _format_str
+										.replace('%h', date.getUTCHours(), 2)
+										.replace('%m', date.getUTCMinutes(), 2)
+										.replace('%s', date.getUTCSeconds(), 2);
+							}
+						},
+						dateFormatter: {
+							format: (date) => {
+								return date.getUTCFullYear() + '/' + (date.getUTCMonth() + 1) + '/' + date.getUTCDate();
+							}
+						},
+					}
+				});
+				widget.onChartReady(() => {
+					console.info("dzm");
+					const chart = widget.activeChart(); // 假设 widget 是你的 Charting Library 实例
+					/*
+					const startTime = Math.floor(new Date('2025-01-22T00:00:00Z').getTime() / 1000);
+					const endTime = Math.floor(new Date('2025-03-01T00:00:00Z').getTime() / 1000);
+
+					// 创建线段
+					var test = chart.createMultipointShape(
+					  [
+						{ time: startTime, price: 200 },
+						{ time: endTime, price: 212 },
+					  ],
+					  {
+						shape: 'trend_line',
+						overrides: {
+						  linecolor: '#FF0000',
+						  linewidth: 2,
+						},
+						lock: true,
+						disableSelection: true,
+						disableSave: true,
+						disableUndo: true,
+						text: "text",
+					  })*/
+				  // widget.activeChart().setResolution('5');  // 显式设置为 5 分钟
+					//add chanThoeryButton
+					const chartContainer = document.getElementById('tv_chart_container');
+					// --------------------三买/卖--------------------
+					var checkbox = document.createElement('input');
+					checkbox.type = 'checkbox';
+					checkbox.id = 'thirdBSAndHot';
+					checkbox.name = '热门';
+					checkbox.value = '1';
+					checkbox.checked = true;
+					chartContainer.appendChild(checkbox);
+					const thirdBS = document.createElement('button');
+					thirdBS.id = 'thirdBS';
+					thirdBS.innerText = '三买/卖';
+					chartContainer.appendChild(thirdBS);
+					thirdBS.addEventListener('click', function() {
+						var last2day = $("#calendar1").val();
+						var tt=$("#calendar2").val();
+						const resolution = chart.resolution();
+						var symbol = chart.symbol();
+						symbol = symbol.split(":")[1];
+						var checked=$("#thirdBSAndHot").is(':checked');
+						// console.info(resolution,symbol);
+						thirdBS_uri = '/third_bs_query?hot='+checked+'&datetimeGT='+last2day+"&datetimeET="+tt+"&resolution="+resolution;
+						thirdBSTableObj.ajax.url(baseUrl + thirdBS_uri).load();
+						$("#thirdBSDiv").dialog('open');
+						// myTableObj.ajax.reload();
+					})
+					const topVolume= document.createElement('button');
+					topVolume.id = 'topVolume';
+					topVolume.innerText = '成交量100';
+					chartContainer.appendChild(topVolume);
+					topVolume.addEventListener('click', function(){
+						var last2day = $("#calendar1").val();
+						var tt=$("#calendar2").val();
+						top_volume_uri = '/top_volume?&datetimeGT='+last2day+"&datetimeET="+tt;
+						topVolumeTableObj.ajax.url(baseUrl + top_volume_uri).load();
+						$("#topVolumeDiv").dialog('open');
+					})
+					// --------------------缠论-线--------------------
+					const button = document.createElement('button');
+					button.id = 'chanThoery';
+					button.innerText = '缠论-线';
+					// button.style.position = 'absolute';
+					// button.style.top = '10px';
+					// button.style.right = '10px';
+
+					// 添加点击事件监听器
+					button.addEventListener('click', function() {
+						const resolution = chart.resolution();
+						var symbol = chart.symbol();
+						symbol = symbol.split(":")[1]
+						console.info(resolution,symbol);
+						clearAllLines(chart);
+
+						drawLines(chart, symbol, resolution);
+					});
+					chartContainer.appendChild(button);
+					//--------------------热门股票--------------------
+					const button_hot = document.createElement('button');
+					button_hot.id = 'hotStockButton';
+					button_hot.innerText = '热股';
+					chartContainer.appendChild(button_hot);
+					button_hot.addEventListener('click', function() {
+						$("#hotStock").dialog('open');
+						// myTableObj.ajax.reload();
+						myTableObj.ajax.url(baseUrl + hot_stock_uri).load();
+					});
+					//监听resolution change Event
+					chart.onIntervalChanged().subscribe(null, (interval, timeframeObj) =>
+							{
+								// console.info("change");
+								// console.info(interval);
+								clearAllLines(chart);
+								var symbol = chart.symbol();
+								symbol = symbol.split(":")[1]
+								drawLines(chart, symbol, interval);
+							}
+					);
+				});
+			};
+
+
+			window.addEventListener('DOMContentLoaded', initOnReady, false);
+		</script>
+
+	</head>
+
+	<body style="margin:0px;">
+		<div id="tv_chart_container"></div>
+		<div id="calender">
+			开始时间：
+			<input type="text" id="calendar1" style="width:88px">
+			结束时间：
+			<input type="text" id="calendar2" style="width:88px">
+			MA10倍数：<input type="text" id="multi" value="1.5" style="width:36px"/>
+		</div>
+		<div id="hotStock" title="筛选热门股票" style="display:none;">
+		  <div style="background-color: #fff">
+			  <table id="myTable" class="display" width="100%">
+				  <thead>
+				  	<tr>
+						<th>时间</th>
+						<th>代码</th>
+						<th><input type="text" placeholder="搜索成交量"></th>
+						<th><input type="text" placeholder="搜索MA5"></th>
+						<th><input type="text" placeholder="搜索MA10"></th>
+						<th><input type="text" placeholder="搜索差值(MA5)"></th>
+						<th><input type="text" placeholder="搜索差值(MA10)"></th>
+						<th><input type="text" placeholder="搜索MA5 %"></th>
+						<th><input type="text" placeholder="搜索MA10 %"></th>
+						<th></th>
+					</tr>
+				  	<tr>
+						<th>时间</th>
+						<th>代码</th>
+						<th>成交量</th>
+						<th>MA5</th>
+						<th>MA10</th>
+						<th>差值(MA5)</th>
+						<th>差值(MA10)</th>
+						<th>MA5 %</th>
+						<th>MA10 %</th>
+						<th>操作</th>
+					</tr>
+				</thead>
+				<tbody>
+					<!-- Ajax 渲染，这里可以留空 -->
+				</tbody>
+			  </table>
+		  </div>
+		</div>
+		<div id="thirdBSDiv" title="三买/卖" style="display:none;">
+			  <div style="background-color: #fff">
+				  <table id="thirdBSTable" class="display" width="100%">
+					  <thead>
+						<tr>
+							<th>代码</th>
+							<th>开始时间</th>
+							<th>结束时间</th>
+							<th>线段类型</th>
+							<th>买卖类型</th>
+							<th>成交量</th>
+							<th>MA10</th>
+							<th>成交倍比</th>
+							<th>操作</th>
+						</tr>
+					</thead>
+					<tbody>
+						<!-- Ajax 渲染，这里可以留空 -->
+					</tbody>
+				  </table>
+			  </div>
+			</div>
+		<div id="topVolumeDiv" title="成交量前100" style="display:none;">
+			<div style="background-color: #fff">
+				<table id="topVolumeTable" class="display" width="100%">
+					  <thead>
+						<tr>
+							<th>代码</th>
+							<th>时间</th>
+							<th>开盘价</th>
+							<th>最高价</th>
+							<th>最低价</th>
+							<th>收盘价</th>
+							<th>成交量</th>
+							<th>操作</th>
+						</tr>
+					</thead>
+					<tbody>
+						<!-- Ajax 渲染，这里可以留空 -->
+					</tbody>
+				  </table>
+			</div>
+		</div>
+	</body>
+
+</html>
