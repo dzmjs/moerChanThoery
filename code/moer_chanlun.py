@@ -23,11 +23,29 @@ class MooreChanLun:
         self.begin_no = 1
         self.begin_type = 'down'
     def is_up_point(self, index):
-        result = self.data['high'][index] >= self.data['high'][index-1] and self.data['high'][index] >= self.data['high'][index+1]
+        if(index+1 < self.data.shape[0]):
+            result = self.data['high'][index] >= self.data['high'][index-1] and self.data['high'][index] >= self.data['high'][index+1]
+        else:
+            result = self.data['high'][index] >= self.data['high'][index - 1]
         return result
     def is_down_point(self, index):
-        result = self.data['low'][index] <= self.data['low'][index-1] and self.data['low'][index] <= self.data['low'][index+1]
+        if(index+1 < self.data.shape[0]):
+            result = self.data['low'][index] <= self.data['low'][index-1] and self.data['low'][index] <= self.data['low'][index+1]
+        else:
+            result = self.data['low'][index] <= self.data['low'][index - 1]
         return result
+
+    def find_begin_point_with_end_date(self, begin_date, line_type):
+        if line_type == 'up':
+            self.begin_type = 'down'
+        else:
+            self.begin_type = 'up'
+        list = self.data.index[self.data['date'] == begin_date].tolist()
+        if(len(list) == 1):
+            self.begin_no = list[0]
+            return list[0]
+        else:
+            return None
     def find_begin_point(self):
         max_row_index = self.data['high'].idxmax()
         min_row_index = self.data['low'].idxmin()
@@ -98,7 +116,10 @@ class MooreChanLun:
                 bv2 = self.data['high'][begin + 1]
                 ev1 = self.data['low'][end - 1]
                 ev  = self.data['low'][end]
-                ev2 = self.data['low'][end + 1]
+                if(end + 1 == len(self.data)):
+                    ev2 = ev
+                else:
+                    ev2 = self.data['low'][end + 1]
                 zs_high = zs.high
                 zs_low = zs.low
                 if ((bv < zs_low and bv1 < zs_low) or (bv < zs_low and bv2 < zs_low) or
@@ -110,7 +131,10 @@ class MooreChanLun:
                 bv2 = self.data['low'][begin + 1]
                 ev1 = self.data['high'][end - 1]
                 ev  = self.data['high'][end]
-                ev2 = self.data['high'][end + 1]
+                if (end + 1 == len(self.data)):
+                    ev2 = ev
+                else:
+                    ev2 = self.data['high'][end + 1]
                 zs_high = zs.high
                 zs_low = zs.low
                 if ((bv > zs_low and bv1 > zs_low) or (bv > zs_low and bv2 > zs_low) or
@@ -171,8 +195,10 @@ class MooreChanLun:
                 if index not in zs_line.cross:
                     zs_line.cross.append(index)
                     zs_line.count = zs_line.count + 1
-            if (self.data['low'][index] > self.data['high'][index-1]
-                or self.data['high'][index] < self.data['low'][index-1]):
+            if ((self.data['low'][index] > self.data['high'][index-1] and
+                    not (self.data['low'][index] > zs_line.high or self.data['high'][index] < zs_line.low))
+                    or (self.data['high'][index] < self.data['low'][index-1] and
+                    not (self.data['low'][index] > zs_line.high or self.data['high'][index] < zs_line.low))):
                 if index not in zs_line.cross:
                     zs_line.cross.append(index)
                     zs_line.count = zs_line.count + 1
@@ -186,7 +212,7 @@ class MooreChanLun:
         last_line = None
         line_segrement=[]
 
-        for i in range(self.begin_no, len(self.data) - 1):
+        for i in range(self.begin_no, len(self.data)):
             if start_point is None:
                 start_point = {
                     'start': i,
@@ -204,7 +230,7 @@ class MooreChanLun:
                 continue
             up = self.is_up_point(i)  # 是否顶分型
             down = self.is_down_point(i)  # 是否底分型
-            # if i == 926:
+            # if i == 1637:
             #     print("debug")
             if start_point['line_type'] == 'down':
                 if start_point['start']+1 == i:
@@ -235,10 +261,15 @@ class MooreChanLun:
                         'final_end': None,
                     }
                     continue
-                if (self.data['low'][i] < start_point['zhuanzhe']['low']
+                # 转折发生，且已经构成了k线破坏
+                if (self.data['close'][i] < start_point['zhuanzhe']['low']
                         and self.data['low'][i] >= self.data['low'][i-1]):
                     zs_line1 = zs_line(i - 1, self.data)
                     start_point['zs_line'].append(zs_line1)
+                # 转折没发生，但是已经构成了k线破坏
+                # elif(self.data['low'][i] >= self.data['low'][i-1]):
+                #     zs_line1 = zs_line(i - 1, self.data)
+                #     start_point['zs_line'].append(zs_line1)
                 if len(start_point['zs_line']) > 0:
                     zs_finished = self.is_cross_zsh(i, start_point['zs_line'], start_point)
                     if zs_finished and down:
@@ -296,10 +327,14 @@ class MooreChanLun:
                         'final_end': None,
                     }
                     continue
+                # 转折发生，并已经构成了破坏
                 if (self.data['high'][i] > start_point['zhuanzhe']['high']
                         and self.data['high'][i] <= self.data['high'][i-1]):
                     zs_line1 = zs_line(i - 1, self.data)
                     start_point['zs_line'].append(zs_line1)
+                # elif(self.data['high'][i] <= self.data['high'][i-1]): #没转折发生，但是已经构成了破坏
+                #     zs_line1 = zs_line(i - 1, self.data)
+                #     start_point['zs_line'].append(zs_line1)
                 if len(start_point['zs_line']) > 0:
                     zs_finished = self.is_cross_zsh(i, start_point['zs_line'], start_point)
                     if zs_finished and up:

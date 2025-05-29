@@ -86,7 +86,7 @@ if __name__ == '__main__':
         "https": f"http://{ip}:{port}",
         "http": f"http://{ip}:{port}"
     }
-    stock_list = pd.read_sql("SELECT * FROM stock_list where \"CodeType\" = 'stock' order by \"Symbol\" asc offset 3823", engine)
+    stock_list = pd.read_sql("SELECT * FROM stock_list where \"CodeType\" = 'stock' order by \"Symbol\" asc", engine)
     # =====================================================================
     # sql = 'select * from stock_list sl order by sl."Symbol" asc limit 4000 offset 4475' ;
     # df = pd.read_sql(sql, engine)

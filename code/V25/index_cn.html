@@ -17,7 +17,19 @@
 		<!-- dialog JS -->
 		<link href="https://code.jquery.com/ui/1.13.3/themes/base/jquery-ui.css" rel="stylesheet">
 		<script src="https://code.jquery.com/ui/1.13.3/jquery-ui.min.js"></script>
+<!--		<script src="https://raw.githubusercontent.com/ROMB/jquery-dialogextend/master/build/jquery.dialogextend.js"></script>-->
 		<style>
+			#popup {
+				display: none;
+				position: fixed;
+				top: 60px;
+				right: 20px;
+				padding: 40px;
+				background-color: #f8f9fa;
+				border: 1px solid #ced4da;
+				border-radius: 8px;
+				box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+			}
 			#myTable input{
 				width: 100%;
 			}
@@ -120,6 +132,30 @@
 				margin: 4px;
 				cursor: pointer;
 			}
+			.ui-dialog-titlebar-max{
+				position: absolute;
+				right: 66px;
+				background-color: #e9e9e9;
+				color: #000000;
+				border: none;
+				cursor: pointer;
+			}
+			.ui-dialog-titlebar-reset{
+				position: absolute;
+				right: 32px;
+				background-color: #e9e9e9;
+				color: #000000;
+				border: none;
+				cursor: pointer;
+			}
+			.ui-dialog-titlebar-min{
+				position: absolute;
+				right: 96px;
+				background-color: #e9e9e9;
+				color: #000000;
+				border: none;
+				cursor: pointer;
+			}
 		</style>
 
 		<script type="text/javascript">
@@ -128,7 +164,7 @@
 			var hot_stock_uri = '/hot_stock?datetimeGT=2025-05-02';
 			var focus_on_uri = '/focus_on?resolution=1d&datetimeGT=2025-05-02&datetimeET=2025-05-12';
 			var thirdBS_uri = "/third_bs_query?datetimeGT=2025-05-01&datetimeET=2025-05-13&resolution=1D";
-			var thirdBSTableObj=null, thirdCijiTableObj=null;
+			var thirdBSTableObj=null, thirdCijiTableObj=null, thirdBSTableStyle=null ;
 			var cijiChanTable = [], cijiChanTableIndex = -1;
 			const is_confirm_type={
 				0:'筛选',
@@ -231,7 +267,37 @@
 					 autoOpen: false,
 					 width: 1400,
 					 height: 700,
-				 });
+					 create: function(event, ui) {
+						var dialog = $(this).closest(".ui-dialog");
+						// 最下化按钮
+						$("<button class='ui-dialog-titlebar-min'><span style='font-weight: bold;'>—</span></button>")
+						  .appendTo(dialog.find(".ui-dialog-titlebar"))
+						  .click(function() {
+							  thirdBSTableStyle = dialog.attr('style');
+							  dialog.css({ height: "42px" });
+							  dialog.find(".ui-dialog-content").css({ height: "calc(0%)" });
+							  dialog.find(".ui-dialog-content").css({ padding: "0" });
+						  });
+						// 添加最大化按钮
+						$("<button class='ui-dialog-titlebar-max'>🗖</button>")
+						  .appendTo(dialog.find(".ui-dialog-titlebar"))
+						  .click(function() {
+							  dialog.css({ width: "100%", height: "100%", top: 0, left: 0 });
+							  dialog.find(".ui-dialog-content").css({ height: "100%", width:'100%' });
+							  dialog.find(".ui-dialog-content").css({ padding: "2px 1em" });
+						  });
+						//复原窗口 按钮
+						$("<button class='ui-dialog-titlebar-reset'>❐</button>")
+						  .appendTo(dialog.find(".ui-dialog-titlebar"))
+						  .click(function() {
+							  dialog.attr('style', thirdBSTableStyle);
+							  // dialog.css({height: "700px", width: "1400px",top: "19px", left: "60px" });
+							  dialog.find(".ui-dialog-content").css({ height: "100%", width:'100%' });
+							  dialog.find(".ui-dialog-content").css({ padding: "2px 1em" });
+						  });
+
+					 }
+				 })
 				 thirdBSTableObj = $('#thirdBSTable').DataTable({
 					 ajax: {
 						 url: baseUrl + thirdBS_uri,   // 你的后端数据接口地址
@@ -259,6 +325,7 @@
 						 {data: 'Line_Type'},
 						 {data: 'class_type'},
 						 {data: 'endPrice'},
+						 {data: 'rate'},
 						 {
 							"data": null,
 							"title": "操作", // 可选，表头自定义
@@ -266,7 +333,13 @@
 							"render": function(data, type, row, meta){
 								// data/row 就是当前行的数据
 								// 假设row有id主键
-								return '<button class="thirdBS-btn" data-id="'+row.Ticker+'">查看</button>';
+								return '<button class="thirdBS-btn" data-id="'+row.Ticker+'">查看</button>'+
+										'<button class="thirdBS-btn-rate" data-id="'+row.Ticker+'" data-linetype="'+row.Line_Type+'" data-startdate="'+row.startDate+'" data-rate="0">0</button>'+
+										'<button class="thirdBS-btn-rate" data-id="'+row.Ticker+'" data-linetype="'+row.Line_Type+'" data-startdate="'+row.startDate+'" data-rate="1">1</button>'+
+										'<button class="thirdBS-btn-rate" data-id="'+row.Ticker+'" data-linetype="'+row.Line_Type+'" data-startdate="'+row.startDate+'" data-rate="2">2</button>'+
+										'<button class="thirdBS-btn-rate" data-id="'+row.Ticker+'" data-linetype="'+row.Line_Type+'" data-startdate="'+row.startDate+'" data-rate="3">3</button>'+
+										'<button class="thirdBS-btn-rate" data-id="'+row.Ticker+'" data-linetype="'+row.Line_Type+'" data-startdate="'+row.startDate+'" data-rate="4">4</button>'+
+										'<button class="thirdBS-btn-rate" data-id="'+row.Ticker+'" data-linetype="'+row.Line_Type+'" data-startdate="'+row.startDate+'" data-rate="5">5</button>';
 							}
 						}
 
@@ -318,6 +391,39 @@
 					chart.setSymbol(id);
 					$("#hotStock").dialog('close');
 				 });
+				 $(document).on('click', '.thirdBS-btn-rate', function(){
+					var id = $(this).data('id');
+					var linetype = $(this).data('linetype');
+					var startDate = $(this).data('startdate') / 1000;
+					var rate = $(this).data('rate');
+					var chart = window.tvWidget.activeChart();
+					const resolution = chart.resolution();
+					// 你的编辑逻辑
+					 $.ajax({
+						 url: baseUrl + '/chan_rate',
+						 type: 'GET',
+						 dataType: 'json', // 指定返回数据类型为 JSON
+						 data: {
+							 resolution: resolution,
+							 symbol: id,
+							 line_type: linetype,
+							 start_date: startDate,
+							 rate: rate
+						 },
+						 success: function (response) {
+							 $('#popup').html('更新关注度，成功！');
+							 $('#popup').fadeIn();
+							 // 设定3秒后自动关闭
+							 setTimeout(function() {
+								 $('#popup').fadeOut();
+								 thirdBSTableObj.ajax.url(baseUrl + thirdBS_uri).load();
+							 }, 500);
+						 },
+						 error: function () {
+						 }
+					 });
+
+				 });
 				 $(document).on('click', '.thirdBS-btn-confirm', function(){
 					var id = $(this).data('id');
 					var focus_time = $(this).data('id2')/1000;
@@ -331,7 +437,12 @@
 							 code: id
 						 },
 						 success: function (response) {
-							 alert("确认成功！")
+							 $('#popup').html('确认成功！');
+							 $('#popup').fadeIn();
+							 // 设定3秒后自动关闭
+							 setTimeout(function() {
+								 $('#popup').fadeOut();
+							 }, 2000);
 							 thirdCijiTableObj.ajax.url(baseUrl + focus_on_uri).load();
 						 },
 						 error: function () {
@@ -351,7 +462,12 @@
 							 code: id
 						 },
 						 success: function (response) {
-							 alert("取消成功！")
+							 $('#popup').html('取消成功！');
+							 $('#popup').fadeIn();
+							 // 设定3秒后自动关闭
+							 setTimeout(function() {
+								 $('#popup').fadeOut();
+							 }, 2000);
 							 thirdCijiTableObj.ajax.url(baseUrl + focus_on_uri).load();
 						 },
 						 error: function () {
@@ -403,7 +519,12 @@
 							 code: id
 						 },
 						 success: function (response) {
-							 alert("取消成功！")
+							 $('#popup').html('确认成功！');
+							 $('#popup').fadeIn();
+							 // 设定3秒后自动关闭
+							 setTimeout(function() {
+								 $('#popup').fadeOut();
+							 }, 2000);
 						 },
 						 error: function () {
 						 }
@@ -423,7 +544,13 @@
 							 code: id
 						 },
 						 success: function (response) {
-							 alert("取消成功！")
+							 // alert("取消成功！")
+							 $('#popup').html('取消成功！');
+							 $('#popup').fadeIn();
+							 // 设定3秒后自动关闭
+							 setTimeout(function() {
+								 $('#popup').fadeOut();
+							 }, 2000);
 						 },
 						 error: function () {
 						 }
@@ -533,6 +660,9 @@
 										createText(chart, item.startDate, item.startPrice, item.class_type);
 									}
 								}
+								if (item.class_type=='First Sell' || item.class_type=='First Buy'){
+									createText(chart, item.endDate, item.endPrice, item.class_type);
+								}
 							}
 							var lineId = chart.createMultipointShape(
 							  [
@@ -618,7 +748,6 @@
 						timeVisible: true,
 						secondsVisible: true,
 					},
-
 					// disabled_features: ["use_localstorage_for_settings"],
 					disabled_features: [],
 					enabled_features: ["study_templates","use_localstorage_for_settings"],
@@ -774,7 +903,7 @@
 				</tr>
 			</table>
 		</div>
-		<div id="thirdBSDiv" title="三买/卖" style="display:none;">
+		<div id="thirdBSDiv" title="三买/卖" style="display:none;padding: 1px 1em">
 			  <div style="background-color: #fff">
 				  <table id="thirdBSTable" class="display" width="100%">
 					  <thead>
@@ -786,6 +915,7 @@
 							<th>线段类型</th>
 							<th>买卖类型</th>
 							<th>结束价格</th>
+							<th><span title="重要程度:0-5">重要度</span></th>
 							<th>操作</th>
 						</tr>
 					</thead>
@@ -819,6 +949,7 @@
 				  </table>
 			  </div>
 			</div>
+		<div id="popup" style="z-index: 1002">这是一个右下角弹窗！</div>
 	</body>
 
 </html>

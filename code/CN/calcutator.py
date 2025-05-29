@@ -21,6 +21,7 @@ def calcutator_single(stock_code, period, stock_type, stock_length=300):
     if (period == '30' or period == '5') and stock_type == 'index':
         return None
     stock_table = f'stock_{period}'
+    target_table = f'moer_cl_{period}'
     sql = f"select * from {stock_table} where code = '{stock}' order by date desc"
     if stock_length:
         sql += f" limit {stock_length}"
@@ -32,7 +33,16 @@ def calcutator_single(stock_code, period, stock_type, stock_length=300):
 
     # 创建摩尔缠论对象并分析数据
     mct = MooreChanLun(data, stock, period)
-    mct.find_begin_point()
+    if stock_length:
+        date_begin = data.iloc[0]['date']
+        date, tp = find_target_line(stock, date_begin, target_table)
+        if date is None:
+            return None
+        # 基于已存在的线段时间，作为开始
+        mct.find_begin_point_with_end_date(date, tp)
+    else:
+        # 初始做法，使用基于已存在的线段开始绘制
+        mct.find_begin_point()
     mct.draw_lines()
     # print(mct.line_segrement)
     if len(mct.line_segrement) == 0:
@@ -54,6 +64,8 @@ def calcutator_single(stock_code, period, stock_type, stock_length=300):
             endDate = endItem['date']
             startPrice = startItem['high']
             endPrice = endItem['low']
+            closePrice = endItem['close']
+            closeStart = startItem['close']
         else:
             startItem = df.iloc[start]
             endItem = df.iloc[end]
@@ -61,10 +73,12 @@ def calcutator_single(stock_code, period, stock_type, stock_length=300):
             endDate = endItem['date']
             startPrice = startItem['low']
             endPrice = endItem['high']
-        lins_to_database.append([stock, line_type, startDate, endDate, startPrice, endPrice])
+            closePrice = endItem['close']
+            closeStart = startItem['close']
+        lins_to_database.append([stock, line_type, startDate, endDate, startPrice, endPrice, closePrice, closeStart])
     # print(lins_to_database)
     cl_df = pd.DataFrame(lins_to_database,
-                         columns=['Ticker', 'Line_Type', 'startDate', 'endDate', 'startPrice', 'endPrice'])
+                         columns=['Ticker', 'Line_Type', 'startDate', 'endDate', 'startPrice', 'endPrice', 'close_end', 'close_begin'])
     # cl_df.to_sql(f'moer_cl_{period}', engine, if_exists='append', index=False)
     cc = [
         {'name': 'Ticker', 'cType': 'string'},
@@ -73,6 +87,8 @@ def calcutator_single(stock_code, period, stock_type, stock_length=300):
         {'name': 'endDate', 'cType': 'date'},
         {'name': 'startPrice', 'cType': 'float'},
         {'name': 'endPrice', 'cType': 'float'},
+        {'name': 'close_end', 'cType': 'float'},
+        {'name': 'close_begin', 'cType': 'float'},
         {'name': 'class_type', 'cType': 'string'}
     ]
     if cl_df.shape[0] == 0:
@@ -81,11 +97,18 @@ def calcutator_single(stock_code, period, stock_type, stock_length=300):
     cl_df['startDate'] = cl_df['startDate'].dt.strftime('%Y-%m-%d %H:%M:%S')
     cl_df['endDate'] = cl_df['endDate'].dt.strftime('%Y-%m-%d %H:%M:%S')
     cl_df['class_type'] = None
-    iu = InsertOrUpdate(engine, f'moer_cl_{period}', ['Line_Type', 'Ticker', 'startDate'], cc, cl_df)
+    iu = InsertOrUpdate(engine, target_table, ['Line_Type', 'Ticker', 'startDate'], cc, cl_df)
     iu.insert_or_update()
     print(f'缠论分析: {stock}_{period} import successful')
     return True
 
+def find_target_line(code, date, table):
+    sql = f'select * from {table} where \"startDate\" >= \'{date}\' and \"Ticker\"=\'{code}\' order by \"startDate\" asc limit 1'
+    df = pd.read_sql(sql, engine)
+    if(df.shape[0] == 1):
+        return (df.iloc[0]['endDate'], df.iloc[0]['Line_Type'])
+    else:
+        return (None, None)
 def calcutator():
     stock_type_list = ['w', 'd', '30', '5']
     # stock_type_list = ['w', 'd', '30']
@@ -102,7 +125,9 @@ def calcutator():
             if (stock_type == '30' or stock_type == '5') and stock_index == 'index':
                 continue
             stock_table = f'stock_{stock_type}'
-            sql = f"select * from {stock_table} where code = '{stock}' order by date asc"
+            sql = f'select * from {stock_table} where code = \'{stock}\' order by date asc'
+            if stock_type == 'd':
+                sql = f'select * from {stock_table} where code = \'{stock}\' and tradestatus = 1 order by date asc'
             df = pd.read_sql(sql, engine)
             data = df
             if data.shape[0] < 3:
@@ -132,6 +157,8 @@ def calcutator():
                     endDate = endItem['date']
                     startPrice = startItem['high']
                     endPrice = endItem['low']
+                    closePrice = endItem['close']
+                    closeStart = startItem['close']
                 else:
                     startItem = df.iloc[start]
                     endItem = df.iloc[end]
@@ -139,10 +166,12 @@ def calcutator():
                     endDate = endItem['date']
                     startPrice = startItem['low']
                     endPrice = endItem['high']
-                lins_to_database.append([stock, line_type, startDate, endDate, startPrice, endPrice])
+                    closePrice = endItem['close']
+                    closeStart = startItem['close']
+                lins_to_database.append([stock, line_type, startDate, endDate, startPrice, endPrice, closePrice, closeStart])
             # print(lins_to_database)
             cl_df = pd.DataFrame(lins_to_database,
-                                 columns=['Ticker', 'Line_Type', 'startDate', 'endDate', 'startPrice', 'endPrice'])
+                                 columns=['Ticker', 'Line_Type', 'startDate', 'endDate', 'startPrice', 'endPrice', 'close_end', 'close_begin'])
             # cl_df.to_sql(f'moer_cl_{period}', engine, if_exists='append', index=False)
             cc = [
                 {'name': 'Ticker', 'cType': 'string'},
@@ -151,6 +180,8 @@ def calcutator():
                 {'name': 'endDate', 'cType': 'date'},
                 {'name': 'startPrice', 'cType': 'float'},
                 {'name': 'endPrice', 'cType': 'float'},
+                {'name': 'close_end', 'cType': 'float'},
+                {'name': 'close_begin', 'cType': 'float'},
                 {'name': 'class_type', 'cType': 'string'}
             ]
             if cl_df.shape[0] == 0:
@@ -166,3 +197,8 @@ def calcutator():
 if __name__ == '__main__':
     calcutator()
     moer_chanlun_third_buy()
+    # stock_code = 'sh.600387'
+    # period = '5'
+    # stock_type = 'stock'
+    # stock_length = 6000
+    # calcutator_single(stock_code, period, stock_type, stock_length)

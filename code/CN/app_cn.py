@@ -8,8 +8,9 @@ import pandas as pd
 import json
 
 from conf import engine
-from downloadStockCN import download_stock_k
+from downloadStockCN import download_stock_k_with_chan_analyse
 from focusOn import focusOn
+from realtime_data_download import download_stock_data, download_stock_data_with_chan_analyse
 
 
 app = Flask(__name__)
@@ -23,19 +24,19 @@ def minute_k_scheduled_job():
     stock_type_list = ['30', '5']
     today = datetime.today()
     today = timedelta(days=1) + today
-    start_date = today - timedelta(days=3)
+    start_date = today - timedelta(days=4)
     today = today.strftime('%Y-%m-%d')
     start_date = start_date.strftime('%Y-%m-%d')
-    download_stock_k(stock_type_list, start_date, today)
+    download_stock_k_with_chan_analyse(stock_type_list, start_date, today)
 def day_k_scheduled_job():
     print("日k线数据下载, 定时任务执行!")
     stock_type_list = ['d']
     today = datetime.today()
-    today = timedelta(days=1) + today
-    start_date = today - timedelta(days=3)
+    today = timedelta(days=2) + today
+    start_date = today - timedelta(days=5)
     today = today.strftime('%Y-%m-%d')
     start_date = start_date.strftime('%Y-%m-%d')
-    download_stock_k(stock_type_list, start_date, today)
+    download_stock_k_with_chan_analyse(stock_type_list, start_date, today)
 def week_k_scheduled_job():
     print("周k线数据下载, 定时任务执行!")
     stock_type_list = ['w']
@@ -44,24 +45,40 @@ def week_k_scheduled_job():
     start_date = today - timedelta(days=16)
     today = today.strftime('%Y-%m-%d')
     start_date = start_date.strftime('%Y-%m-%d')
-    download_stock_k(stock_type_list, start_date, today)
+    download_stock_k_with_chan_analyse(stock_type_list, start_date, today)
 def focus_d_30_scheduled_job():
     print("日k线, 分钟k线, FocusOn, 定时任务执行!")
     nw = datetime.now().strftime('%Y-%m-%d')
     period_list = ['d', '30']
     for period in period_list:
         focusOn(nw, period)
+
+def download_stock_realtime_data_30_minute():
+    print("实时数据-分钟k线, 下载, 定时任务执行!")
+    download_stock_data_with_chan_analyse(['30', '5'])
 scheduler = BackgroundScheduler()
 
 #test scheduler
-scheduler.add_job(day_k_scheduled_job, CronTrigger(hour=13, minute=2))
-scheduler.add_job(minute_k_scheduled_job, CronTrigger(hour=10, minute=51))
-scheduler.add_job(focus_d_30_scheduled_job, CronTrigger(hour=11, minute=8))
-# production configuration
-scheduler.add_job(week_k_scheduled_job, CronTrigger(hour=6, minute=2, day_of_week=5))
-scheduler.add_job(day_k_scheduled_job, CronTrigger(hour=5, minute=2))
-scheduler.add_job(minute_k_scheduled_job, CronTrigger(hour=22, minute=2))
-scheduler.add_job(focus_d_30_scheduled_job, CronTrigger(hour=11, minute=2))
+scheduler.add_job(day_k_scheduled_job, CronTrigger(hour=2, minute=29, timezone='Asia/Shanghai'))
+scheduler.add_job(minute_k_scheduled_job, CronTrigger(hour=23, minute=14, timezone='Asia/Shanghai'))
+# scheduler.add_job(focus_d_30_scheduled_job, CronTrigger(hour=11, minute=8, timezone='Asia/Shanghai'))
+# production configuration (delay 1 hour)
+scheduler.add_job(week_k_scheduled_job, CronTrigger(hour=18, minute=2, day_of_week=5, timezone='Asia/Shanghai'))
+scheduler.add_job(day_k_scheduled_job, CronTrigger(hour=18, minute=2, timezone='Asia/Shanghai'))
+scheduler.add_job(minute_k_scheduled_job, CronTrigger(hour=18, minute=2, timezone='Asia/Shanghai'))
+scheduler.add_job(focus_d_30_scheduled_job, CronTrigger(hour=23, minute=2, timezone='Asia/Shanghai'))
+# 每周一到周五（0=周一, 4=周五）
+# 每小时10点和11点（但分钟数限制）
+# 每30分钟触发，且只触发在符合 minute=1 和 31 的时间点
+scheduler.add_job(
+    download_stock_realtime_data_30_minute,
+    CronTrigger(
+        day_of_week='0-4',
+        hour='10,11,13,14,15',
+        minute='1,31',
+        timezone='Asia/Shanghai'
+    )
+)
 
 scheduler.start()
 
@@ -198,6 +215,8 @@ def history():
     toTime = int(request.args.get('to', timestamp))
     countSql = (f'SELECT count(1) FROM stock_{resolution} where \"code\" = \'{symbol}\' '
                 f'and \"{field}\" <= TO_TIMESTAMP({toTime})::DATE and \"{field}\" >= TO_TIMESTAMP({fromTime})::DATE')
+    if resolution == 'd':
+        countSql += ' and tradestatus = 0'
     countDf = pd.read_sql(countSql, engine)
     count = countDf['count'][0]
     if count < countback:
@@ -212,7 +231,10 @@ def history():
 
     sql = (f'select "date","open","close","high","low","volume" from stock_{resolution} '
            f'where \"code\" = \'{symbol}\' and \"{field}\" <= \'{formattedToTime}\'  '
-           f'and \"{field}\" >= \'{formattedFromTime}\'  order by \"{field}\" desc limit {countback}')
+           f'and \"{field}\" >= \'{formattedFromTime}\'  ')
+    if resolution == 'd':
+        sql += ' and tradestatus = 1'
+    sql += f' order by \"{field}\" desc limit {countback}'
     df = pd.read_sql(sql, engine)
     if df.shape[0] == 0:
         return {"s": "no_data"}
@@ -428,6 +450,34 @@ def third_bs_query():
         "data": py_obj
     }
     return jsonify(result)  # 这样Flask自动处理响应头和内容
+
+@app.route('/chan_rate', methods=['GET'])
+def chan_rate():
+    resolution = request.args.get('resolution', '1D').lower()
+    ticker = request.args.get('symbol', '').lower()
+    line_type = request.args.get('line_type', '').lower()
+    start_date = request.args.get('start_date', '').lower()
+    dt = datetime.fromtimestamp(int(start_date))  # 默认是本地时区
+    start_date = dt.strftime('%Y-%m-%d %H:%M:%S')
+    rate = request.args.get('rate', '').lower()
+    if resolution == "1d":
+        resolutionT = "d"
+    if resolution == "1w":
+        resolutionT = "w"
+    if resolution == "30" or resolution == "5":
+        resolutionT = resolution
+    table_name = f'moer_cl_{resolutionT}'
+    sql = f' update {table_name} set rate = {rate} where \"Ticker\" = \'{ticker}\' and \"Line_Type\" = \'{line_type}\' and \"startDate\"=\'{start_date}\' '
+    # print(sql)
+    count = 0
+    with engine.connect() as cn:
+        delete_statement = text(sql)
+        result = cn.execute(delete_statement)
+        # print(f'update: {result.rowcount}')
+        count = result.rowcount
+        cn.commit()
+    return jsonify({'status': 'success', 'count': count})
+
 
 @app.route('/chan', methods=['GET'])
 def chan():
